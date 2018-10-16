@@ -9,7 +9,7 @@ console.log相信使用过js的朋友都不会陌生，对于我这种前端转�
 
 当我发现自己对这个知识存在盲区后，赶紧深入内核去看看到底是啥情况，我选择了最常用的POSIX上的TTYs来深入理解。
 
-####从console.log出发
+#### 从console.log出发
 
 首先我在node源文件中从lib/console.js找到了console.log的代码：
 
@@ -32,7 +32,7 @@ console.log相信使用过js的朋友都不会陌生，对于我这种前端转�
 	
 中我们又可以知道，这个`this._stout`就是`process.stdout`，那上面的问题也解释的通了，所以console.log到底是同步输出还是异步输出还真得看情况了。
 
-####process.stdout的实现
+#### process.stdout的实现
 
 现在我们将目光转向`process.stdout`,对于这个属性的定义在lib/internal/process/stdiso.js中，通过分析该文件，我们可以发现stdout的stream是这样定义的：
 	
@@ -147,6 +147,6 @@ console.log相信使用过js的朋友都不会陌生，对于我这种前端转�
 	
 初始化tty的libuv stream handle,从`uv_tty_init`的代码中可以知道，当readable参数为false时就会给handle设置`UV_STREAM_BLOCKING`标记，而readable参数是通过`new TTY(fd, false)`第二个参数传入的，刚好是false，所以process.stdout自然是同步的咯。
 
-####总结
+#### 总结
 
 以前一直觉得自己对node已经很熟悉了，发现是`net.Socket`的流操作时，虽然有点困惑，但也是觉得可能handle是TTY的实例，写操作会不一样，但是在源码中一步步探索，最后发现还是通过libuv的uv_write2的时候，变得异常困惑，因为之前一直觉得它就是通过异步来完成写操作的，而忽略了设置`UV_STREAM_BLOCKING`的情况，最后是在通过在uv_tty_init和其他的流初始化中比较，发现了tty中出现了设置`UV_STREAM_BLOCKING`的情况，再回过头去找，才发现了设置该标志的写操作是同步的情况。通过这件事还是明白了，很多东西不能想当然，得自己多探索了解才能在技术上面沉淀的更多，希望我的这篇文章也同时能帮助到大家。
