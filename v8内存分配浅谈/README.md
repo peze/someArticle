@@ -1,10 +1,10 @@
-###前言
+### 前言
 
 本文会通过V8中对String对象的内存分配开始分析，对中间出现的源码进行解读。对heap内存的新生代分配和老生代内存分配的过程解读。首先，我们来看一张流程图，该流程图给出整个分配过程中的前期流程图，其中省略了一些步骤，只给出了关键的步骤。
 
 ![image1](http://blog.magicare.me/content/images/2018/09/v8_string_map1-1.jpg)
 
-###从String::NewFromUtf8开始
+### 从String::NewFromUtf8开始
 
 我们从String::NewFromUtf8这个函数开始，首先我们来看一下使用，从samples/hello-world.cc中我们可以看到
 	
@@ -63,7 +63,7 @@ kNormal的情况下会创建一个新的string，并且一定会分配内存。�
     
 所以我们可以看出，在kNormal的情况下新建立的string对象都是在新生代的内存区中。这里我们直接从NewStringFromOneByte中的代码流程来说明分配内存的机制，忽略InternalizeUtf8String方法。因为后面其实是殊途同归，不过InternalizeUtf8String中有很大一部分代码是在StringTable中寻找是否已经存在了这个String，所以不太适合我们主题。
 
-###Factory::NewStringFromUtf8初现端倪
+### Factory::NewStringFromUtf8初现端倪
 
 我们首先来看一下NewStringFromUtf8的源码：
 
@@ -86,7 +86,7 @@ kNormal的情况下会创建一个新的string，并且一定会分配内存。�
 
 从注释中我们可以看出，在分配内存时会检查是否为ASCII字符串，如果不是，则需要生成一个decoder的对象来处理，在生成了decoder对象后将utf8的字符串转化成ASCII，然后再生成了Handle对象后再转化回UTF8字符串。不过，不管是什么类型在内存分配方面则是一样的，所以我们直接挑选NewStringFromOneByte来继续深入分析。
 
-#####NewStringFromOneByte
+##### NewStringFromOneByte
 
 在NewStringFromOneByte方法中，代码如下，我只列出了最重要的两个方法：
 
@@ -132,7 +132,7 @@ kNormal的情况下会创建一个新的string，并且一定会分配内存。�
 在恐慌之前先做两次GC，这样在新生代中基本都会成功。这个恐慌我觉得用的很有意思，因为在两次失败以后，系统会做调用一个函数CollectAllAvailableGarbage，之前的两次GC调用的是CollectGarbage函数，从这两个函数的名字我们就可以看出，第二个函数做的操作应该是比较大的一次GC，他内部主要是调用CollectGarbage对老生代进行GC，就会涉及Mark和Compact，从之前的文章中我们可以意识到，这样的操作，甚至会造成工作线程的暂停，所以恐慌一词用在这里很传神。
 GC方面的代码不是我们这次工作的主要内容，所以这里简要的叙述一下，我们接下来看这次的主题函数FUNCTION_CALL，也就是Heap::AllocateRawOneByteString函数。
 
-####从Heap::AllocateRawOneByteString进入分配核心逻辑
+#### 从Heap::AllocateRawOneByteString进入分配核心逻辑
 
 首先我们来看流程图：
 ![image2](http://blog.magicare.me/content/images/2018/09/v8_new_string2.jpg)
@@ -150,7 +150,7 @@ GC方面的代码不是我们这次工作的主要内容，所以这里简要的
 第一个set_map函数是把one_byte_string_map将map加入到对象中，这个Map应该就是String对象的HiddenClass，里面存储了String对象的方法和属性以及其偏移，这样做最大的好处就是String对象基本都一样，对象变动的机会不大，很容易利用到InlineCache的优化（HiddenClass以及InlineCache的文章[Hidden Classes](https://www.understandingv8.com/en/hidden-classes.html)）。后面两个set_length方法和set_hash方法就基本跟他的名字一样，就不必赘言了。
 我们现在来重点讨论一下Heap::AllocateRaw,首先从流程图中我们可以看到有五种情况，对应着四个函数，这里我们主要讲新生代和老生代的AllocateRaw方法。
 
-###分配核心之NewSpace::AllocateRaw
+### 分配核心之NewSpace::AllocateRaw
 
 我们首先来讲新生代的内存分配方法，下面是NewSpace::AllocateRaw的流程图：
 
@@ -229,11 +229,11 @@ NewSpace::EnsureAllocation的逻辑，下面我们看一下这个方法的主要
 
 3.idle scavenge希望能够记录新分配的内存并在大于一个阈值的情况下执行
 
-所以我们可以看出，设置limit的原因最主要是为了为一些allocate observers在allocate发生时执行他们各自对应的AllocationStep方法。
+所以我们可以看出，设置limit的原因最主要是为了为一些allocate observers在allocate发生时执行他们各自对应的AllocationStep方法(比如profile里面的SamplingHeapProfiler用来收集每个函数分配内存大小的监控器就是通过这个调用的)。
 
 到这里新生代的内存分配以及生成object的过程就已经讲完了，接下来我们来说一下老生代的内存分配方法。
 
-###分配核心之OldSpace::AllocateRaw
+### 分配核心之OldSpace::AllocateRaw
 
 因为OldSpace中的AllocateRaw方法并没有重写，是直接使用的父类PagedSpace中的AllocateRaw方法，所以在之前图中，我们直接使用了PagedSpace::AllocateRaw方法来表示。接下来老规矩，我们先看一下老生代内存分配方面的方法流程图：
 
@@ -258,7 +258,7 @@ NewSpace::EnsureAllocation的逻辑，下面我们看一下这个方法的主要
 
 讲完了这些对象的关系，我们就开始说起函数FreeList::Allocate的过程了。
 
-####FreeList::Allocate
+#### FreeList::Allocate
 
 这段代码前，有一段注释能说明为什么oldSpace的分配内存会复杂
 
@@ -386,7 +386,7 @@ NewSpace::EnsureAllocation的逻辑，下面我们看一下这个方法的主要
 
 而如果未分配成功的话，从流程图我们可以知晓，接下来会调用函数PagedSpace::SlowAllocateRaw,不过PagedSpace::SlowAllocateRaw函数主要是一个过渡函数，将当前的heap的VMState设置为GC状态，并开始对马上要执行的函数设置一个timer来计时，而马上要执行的函数PagedSpace::RawSlowAllocateRaw才是我们真正需要了解的函数。
 
-####PagedSpace::RawSlowAllocateRaw
+#### PagedSpace::RawSlowAllocateRaw
 
 从流程图我们可以看出函数的第一步，如果判断当前的heap在做sweep操作且不是在CompactionSpace中且sweeper本身已经没有task在运行了，则通过MarkCompactCollector::EnsureSweepingCompleted函数等待sweep操作结束再进行下面的操作。在结束了sweep以后，会重新装填FreeList的page，因为此时sweeper线程已经释放了一些object了，这个操作由PagedSpace::RefillFreeList来完成，其代码如下:
 
@@ -469,7 +469,7 @@ NewSpace::EnsureAllocation的逻辑，下面我们看一下这个方法的主要
 如果PagedSpace::SlowAllocateRaw分配成功，则需要对分配成功的区域进行一个标记，标记该内存段是刚分配的不需要清理，使用Page::CreateBlackArea来完成。在以上操作成功的返回Object后，就会调用函数PagedSpace::AllocationStep，这个函数我们也不陌生，在新生代中使用过，他会通知space中的各个allocation observers调用各自的AllocationStep方法，做一些统计方面的工作。
 
 
-###总结
+### 总结
 
 以上就是整个V8内存分配中的过程，该过程非常复杂，还涉及了很多GC相关的东西，但是V8代码确实是一个精湛的工艺品，里面的函数名都取的让人知道是做什么的，里面的注释也恰到好处，很多时候我陷入困惑的时候总能从一些注释中得到线索，慢慢又顺藤摸瓜的搞出答案，当然这个只是系统的一部分，而且整个系统异常的精密，很多东西不联系其他模块上也无法知道，所以上面也存了一些疑惑的地方。下次有时间，我会再来一探GC的究竟，当然这块更是一个硬骨头，希望能够搞懂~
 	
